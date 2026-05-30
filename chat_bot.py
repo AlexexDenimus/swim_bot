@@ -21,10 +21,8 @@ dp = Dispatcher()
 BASE_DIR = Path(__file__).resolve().parent
 
 REFERENCE_VIDEOS = {
-    "bras": BASE_DIR / "data/reference/Брасс вид сбоку.mp4",
-    "crawl": BASE_DIR / "data/reference/Кроль сверху.mp4",
-    "jump": BASE_DIR / "data/reference/Прыжок сбоку.mp4",
-    "turn": BASE_DIR / "data/reference/разворот.mp4",
+    "bras": BASE_DIR / "data/Брасс сверху.mp4",
+    "crawl": BASE_DIR / "data/Кроль сверху.mp4",
 }
 
 REFERENCE_KEYPOINTS: dict[str, dict] = {}
@@ -38,8 +36,6 @@ def get_inline_keyboard():
         inline_keyboard=[
             [InlineKeyboardButton(text="Брасс", callback_data="bras")],
             [InlineKeyboardButton(text="Кроль", callback_data="crawl")],
-            [InlineKeyboardButton(text="Прыжок", callback_data="jump")],
-            [InlineKeyboardButton(text="Разворот", callback_data="turn")],
         ],
     )
     return keyboard
@@ -149,16 +145,6 @@ async def bras_callback(callback: CallbackQuery):
 @dp.callback_query(F.data == "crawl")
 async def crawl_callback(callback: CallbackQuery):
     await send_reference_video(callback, "crawl")
-
-
-@dp.callback_query(F.data == "jump")
-async def jump_callback(callback: CallbackQuery):
-    await send_reference_video(callback, "jump")
-
-
-@dp.callback_query(F.data == "turn")
-async def turn_callback(callback: CallbackQuery):
-    await send_reference_video(callback, "turn")
 
 
 async def main():
