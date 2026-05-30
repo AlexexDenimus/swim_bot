@@ -30,6 +30,7 @@ numpy==2.4.6
 onnxruntime==1.26.0
 opencv-contrib-python==4.13.0.92
 opencv-python==4.13.0.92
+opencv-python-headless==4.13.0.92
 packaging==26.2
 parso==0.8.7
 pexpect==4.9.0
