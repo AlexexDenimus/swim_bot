@@ -12,10 +12,13 @@ from aiogram.types import (
 )
 from aiogram.filters import Command
 
+from os import getenv
+from dotenv import load_dotenv
+
 from move_tracker import compare_videos, extract_keypoints
 
-TOKEN = "8846134044:AAHw9tIiIgTX-HtLLOmi8EMNR62PIfFoL9g"
-
+load_dotenv()
+TOKEN = getenv("BOT_TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 BASE_DIR = Path(__file__).resolve().parent
