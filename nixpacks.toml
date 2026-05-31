@@ -9,3 +9,9 @@ aptPkgs = [
   "libxcb1",
   "ffmpeg"
 ]
+
+[phases.install]
+cmds = [
+  "pip uninstall -y opencv-python opencv-contrib-python || true",
+  "pip install --no-cache-dir opencv-python-headless opencv-contrib-python-headless"
+]
