@@ -1,8 +1,9 @@
 import asyncio
-from pathlib import Path
+from os import getenv
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ChatAction
+from aiogram.filters import Command
 from aiogram.types import (
     CallbackQuery,
     FSInputFile,
@@ -10,23 +11,16 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     Message,
 )
-from aiogram.filters import Command
-
-from os import getenv
 from dotenv import load_dotenv
 
-from move_tracker import compare_videos, extract_keypoints
+from swimbot.config import TMP_DIR
+from swimbot_data.references import REFERENCE_VIDEOS
+from swimbot_models.move_tracker import compare_videos, extract_keypoints
 
 load_dotenv()
 TOKEN = getenv("BOT_TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
-BASE_DIR = Path(__file__).resolve().parent
-
-REFERENCE_VIDEOS = {
-    "bras": BASE_DIR / "data/Брасс сверху.mp4",
-    "crawl": BASE_DIR / "data/Кроль сверху.mp4",
-}
 
 REFERENCE_KEYPOINTS: dict[str, dict] = {}
 USER_STYLE: dict[int, str] = {}
@@ -47,11 +41,18 @@ def get_inline_keyboard():
 async def warmup_references():
     loop = asyncio.get_running_loop()
     for key, path in REFERENCE_VIDEOS.items():
-        print(f"Extracting keypoints for {key}...")
+        print(f"Extracting keypoints for {key}...", flush=True)
         REFERENCE_KEYPOINTS[key] = await loop.run_in_executor(
-            None, extract_keypoints, str(path), False
+            None,
+            lambda path=path: extract_keypoints(
+                str(path),
+                False,
+                use_orientation_flip=False,
+                preprocess=False,
+                frame_stride=2,
+            ),
         )
-    print("Reference warmup complete.")
+    print("Reference warmup complete.", flush=True)
 
 
 async def send_reference_video(callback: CallbackQuery, video_key: str):
@@ -84,10 +85,9 @@ async def video_message(message: Message):
         )
         return
 
-    tmp_dir = BASE_DIR / "data" / "tmp"
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    tmp_in = tmp_dir / f"{user_id}_in.mp4"
-    tmp_out = tmp_dir / f"{user_id}_out.mp4"
+    TMP_DIR.mkdir(parents=True, exist_ok=True)
+    tmp_in = TMP_DIR / f"{user_id}_in.mp4"
+    tmp_out = TMP_DIR / f"{user_id}_out.mp4"
 
     await bot.download(message.video, destination=str(tmp_in))
     await message.answer("Анализирую видео, это займёт ~30-60 секунд...")
@@ -151,11 +151,7 @@ async def crawl_callback(callback: CallbackQuery):
 
 
 async def main():
-    (BASE_DIR / "data" / "tmp").mkdir(parents=True, exist_ok=True)
+    TMP_DIR.mkdir(parents=True, exist_ok=True)
     print("Bot is running...")
     await warmup_references()
     await dp.start_polling(bot)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

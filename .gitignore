@@ -3,4 +3,4 @@
 __pycache__/
 *.pyc
 .DS_Store
-data/tmp/
+src/swimbot_data/tmp/

@@ -5,5 +5,5 @@ __pycache__/
 .git/
 .gitignore
 *.ipynb
-data/tmp/
+src/swimbot_data/tmp/
 .DS_Store
