@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY requirements.txt ./
+COPY requirements.txt pyproject.toml ./
 COPY src/ src/
 
 # rtmlib pulls in GUI OpenCV (opencv-python / opencv-contrib-python).
