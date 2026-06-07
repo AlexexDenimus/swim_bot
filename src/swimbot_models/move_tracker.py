@@ -3,58 +3,58 @@ import numpy as np
 from rtmlib import Body
 
 # ---------------------------------------------------------------------------
-# COCO-17 skeleton connections (for future skeleton overlay use)
+# COCO-17 (17 точек тела)
 # ---------------------------------------------------------------------------
 COCO_CONNECTIONS = [
     (0, 1),
     (0, 2),
     (1, 3),
-    (2, 4),  # head
+    (2, 4),  # голова
     (5, 7),
     (7, 9),
     (6, 8),
-    (8, 10),  # arms
+    (8, 10),  # руки
     (5, 6),
     (5, 11),
     (6, 12),
-    (11, 12),  # torso
+    (11, 12),  # торс
     (11, 13),
     (13, 15),
     (12, 14),
-    (14, 16),  # legs
+    (14, 16),  # ноги
 ]
 
 # ---------------------------------------------------------------------------
-# Per-joint confidence thresholds
+# Пороги уверенности для каждой точки тела
 # ---------------------------------------------------------------------------
 _DEFAULT_THR = np.full(17, 0.35)
-_DEFAULT_THR[7:11] = 0.15  # elbows + wrists
-_DEFAULT_THR[11:13] = 0.18  # hips
-_DEFAULT_THR[13:15] = 0.25  # knees
-_DEFAULT_THR[15:17] = 0.30  # ankles
+_DEFAULT_THR[7:11] = 0.15  # локти и запястья
+_DEFAULT_THR[11:13] = 0.18  # бёдра
+_DEFAULT_THR[13:15] = 0.25  # колени
+_DEFAULT_THR[15:17] = 0.30  # лодыжки
 
 _UPDATE_THR = _DEFAULT_THR.copy()
 _UPDATE_THR[11:13] = 0.15
 _UPDATE_THR[13:15] = 0.22
 _UPDATE_THR[15:17] = 0.28
 
-# Threshold used by the DTW / similarity code (RTMPose scores are in [0, 1])
+# Порог для сравнения поз и DTW (оценки RTMPose от 0 до 1)
 _DEFAULT_SCORE_THR = 0.35
 
 # ---------------------------------------------------------------------------
-# Per-joint one-frame motion caps (in body-scale units)
+# Максимальный скачок точки за один кадр (в долях размера тела)
 # ---------------------------------------------------------------------------
 _MAX_JUMP_BY_JOINT = np.full(17, 1.10, dtype=np.float64)
-_MAX_JUMP_BY_JOINT[0:5] = 0.45  # head / face
-_MAX_JUMP_BY_JOINT[5:7] = 0.45  # shoulders
-_MAX_JUMP_BY_JOINT[7:9] = 1.00  # elbows
-_MAX_JUMP_BY_JOINT[9:11] = 1.40  # wrists
-_MAX_JUMP_BY_JOINT[11:13] = 0.45  # hips
-_MAX_JUMP_BY_JOINT[13:15] = 1.10  # knees
-_MAX_JUMP_BY_JOINT[15:17] = 1.30  # ankles
+_MAX_JUMP_BY_JOINT[0:5] = 0.45  # голова и лицо
+_MAX_JUMP_BY_JOINT[5:7] = 0.45  # плечи
+_MAX_JUMP_BY_JOINT[7:9] = 1.00  # локти
+_MAX_JUMP_BY_JOINT[9:11] = 1.40  # запястья
+_MAX_JUMP_BY_JOINT[11:13] = 0.45  # бёдра
+_MAX_JUMP_BY_JOINT[13:15] = 1.10  # колени
+_MAX_JUMP_BY_JOINT[15:17] = 1.30  # лодыжки
 
 # ---------------------------------------------------------------------------
-# Bone definitions used by the temporal smoother
+# Кости тела для сглаживания по времени
 # ---------------------------------------------------------------------------
 _TORSO_BONES = ((5, 6), (11, 12), (5, 11), (6, 12))
 
@@ -70,7 +70,7 @@ _LIMB_BONES = (
 )
 
 # ---------------------------------------------------------------------------
-# RTMPose-L model URLs
+# Ссылки на модели
 # ---------------------------------------------------------------------------
 _RTMPOSE_L_URL = (
     "https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/"
@@ -91,13 +91,8 @@ _model = Body(
 )
 
 
-# ===========================================================================
-# Tracker primitives (ported from move_tracker.ipynb)
-# ===========================================================================
-
-
 def _preprocess(frame: np.ndarray) -> np.ndarray:
-    """CLAHE + unsharp mask to lift contrast and counter motion blur."""
+    """Улучшает контраст кадра и убирает размытие от движения."""
     lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
     lc, a, b = cv2.split(lab)
     lc = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)).apply(lc)
@@ -107,7 +102,7 @@ def _preprocess(frame: np.ndarray) -> np.ndarray:
 
 
 class _OneEuroFilter:
-    """One-Euro adaptive low-pass filter for noisy real-time signals."""
+    """Сглаживает шумные сигналы в реальном времени (фильтр One-Euro)."""
 
     def __init__(
         self,
@@ -220,7 +215,7 @@ def _detect_swim_cap(
     max_jump_px: float = 80.0,
     radius_change_factor: float = 0.5,
 ) -> tuple[np.ndarray | None, float]:
-    """Locate the dark swim-cap blob; return (centroid_xy, radius_px)."""
+    """Ищет тёмную шапочку на кадре. Возвращает центр и радиус в пикселях."""
     if frame is None:
         return None, 0.0
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -266,7 +261,7 @@ def _select_best_person(
     prev_center: np.ndarray | None,
     prev_scale: float | None,
 ) -> int:
-    """Pick the detection that best matches the tracked body."""
+    """Выбирает человека, который лучше всего совпадает с уже отслеживаемым."""
     n = int(len(keypoints))
     if n == 0:
         return 0
@@ -294,7 +289,7 @@ def _infer_pose_with_flip(
     prev_center: np.ndarray | None,
     prev_scale: float | None,
 ) -> tuple[np.ndarray | None, np.ndarray | None]:
-    """Run RTMPose on the frame and its 180°-rotated copy; keep the better one."""
+    """Запускает распознавание позы на кадре и на его повороте на 180°; берёт лучший результат."""
     h, w = frame.shape[:2]
 
     def _eval(kp_arr, sc_arr):
@@ -321,7 +316,7 @@ def _infer_pose_with_flip(
 
 
 class _KPSmoother:
-    """One-Euro filter on each (x, y) coord with last-known position fallback."""
+    """Сглаживает координаты точек тела; при пропуске кадра использует последнюю известную позу."""
 
     def __init__(
         self,
@@ -599,16 +594,16 @@ class _KPSmoother:
 
 
 # ===========================================================================
-# Pose normalisation and distance metrics
+# Нормализация позы и метрики расстояния
 # ===========================================================================
 
 
 def normalize_kp(kp, scores=None, score_thr=_DEFAULT_SCORE_THR):
-    """Center on torso, scale by torso size.
+    """Центрирует позу по торсу и масштабирует по размеру тела.
 
-    Translation and scale invariant pose representation. When `scores` is given,
-    visibility / confidence is used to pick anchors so rotated or partly
-    occluded frames stay stable.
+    Поза не зависит от положения и размера человека в кадре.
+    Если переданы оценки уверенности, надёжные точки используются
+    как опорные — так проще работать с поворотами и перекрытиями.
     """
     kp = np.asarray(kp, dtype=np.float64)
     kp_xy = kp[:, :2].copy()
@@ -663,7 +658,7 @@ def normalize_kp(kp, scores=None, score_thr=_DEFAULT_SCORE_THR):
 def frame_error_weighted(
     kp_ref, sc_ref, kp_user, sc_user, score_thr=_DEFAULT_SCORE_THR
 ):
-    """Confidence-weighted normalized pose distance between two frames."""
+    """Считает взвешенное расстояние между двумя позами на одном кадре."""
     a = normalize_kp(kp_ref, sc_ref, score_thr=score_thr)
     b = normalize_kp(kp_user, sc_user, score_thr=score_thr)
 
@@ -679,12 +674,12 @@ def frame_error_weighted(
 
 
 def _precompute_pose_features(keypoints_seq, scores_seq, score_thr=_DEFAULT_SCORE_THR):
-    """Normalize all frames once and return stacked arrays.
+    """Нормализует все кадры один раз и собирает их в массивы.
 
-    Returns:
-        pts:    (T, 17, 2) float64 — normalized keypoint coordinates
-        vis:    (T, 17)    bool    — joints with confidence > score_thr
-        scores: (T, 17)    float64 — raw confidence scores
+    Возвращает:
+        pts:    (T, 17, 2) — нормализованные координаты точек
+        vis:    (T, 17)    — точки с уверенностью выше порога
+        scores: (T, 17)    — исходные оценки уверенности
     """
     T_frames = len(keypoints_seq)
     pts = np.zeros((T_frames, 17, 2), dtype=np.float64)
@@ -699,7 +694,7 @@ def _precompute_pose_features(keypoints_seq, scores_seq, score_thr=_DEFAULT_SCOR
 
 
 def _cost_matrix(ref_feat, user_feat, score_thr=_DEFAULT_SCORE_THR):
-    """Build the (M, N) confidence-weighted cost matrix."""
+    """Строит матрицу стоимости (M, N) с учётом уверенности в точках."""
     ref_pts, ref_vis, ref_sc = ref_feat
     usr_pts, usr_vis, usr_sc = user_feat
 
@@ -742,18 +737,23 @@ def _cost_matrix(ref_feat, user_feat, score_thr=_DEFAULT_SCORE_THR):
     return C
 
 
-def _subsequence_dtw(C):
-    """Open-begin / open-end subsequence DTW.
+def _subsequence_dtw(C, step_penalty=0.0):
+    """Сравнивает движения методом DTW с открытым началом и концом.
 
-    The reference axis (rows, length M) must be matched in full.
-    The user axis (cols, length N) can start and end freely, so idle
-    frames before and after the movement are skipped automatically.
+    Эталон (строки, длина M) должен быть сопоставлен полностью.
+    Видео пользователя (столбцы, длина N) может начинаться и заканчиваться
+    где угодно — лишние кадры в начале и конце автоматически пропускаются.
 
-    Returns:
-        distance  — total path cost (sum, not mean)
-        path      — list of (i, j) index pairs, same format as fastdtw
-        j_start   — first user frame used
-        j_end     — last user frame used
+    step_penalty добавляется к каждому шагу не по диагонали: вертикальный —
+    один кадр пользователя сопоставлен с несколькими эталонными; горизонтальный —
+    кадр пользователя пропущен. Без штрафа DTW может «схлопнуть» весь эталон
+    в один кадр. Положительный штраф смещает выравнивание к диагонали 1:1.
+
+    Возвращает:
+        distance — суммарная стоимость пути
+        path     — список пар индексов (i, j)
+        j_start  — первый использованный кадр пользователя
+        j_end    — последний использованный кадр пользователя
     """
     M, N = C.shape
 
@@ -761,14 +761,14 @@ def _subsequence_dtw(C):
     D[0, :] = C[0, :]
 
     for i in range(1, M):
-        from_above = D[i - 1, :]
+        from_above = D[i - 1, :] + step_penalty
         from_diag = np.full(N, np.inf)
         from_diag[1:] = D[i - 1, :-1]
 
         row = np.minimum(from_above, from_diag) + C[i, :]
 
         for j in range(1, N):
-            candidate = row[j - 1] + C[i, j]
+            candidate = row[j - 1] + step_penalty + C[i, j]
             if candidate < row[j]:
                 row[j] = candidate
 
@@ -783,8 +783,8 @@ def _subsequence_dtw(C):
         path.append((i, j))
         options = [
             (D[i - 1, j - 1] if j > 0 else np.inf, i - 1, j - 1),
-            (D[i - 1, j], i - 1, j),
-            (D[i, j - 1] if j > 0 else np.inf, i, j - 1),
+            (D[i - 1, j] + step_penalty, i - 1, j),
+            (D[i, j - 1] + step_penalty if j > 0 else np.inf, i, j - 1),
         ]
         _, i, j = min(options, key=lambda x: x[0])
     path.append((i, j))
@@ -795,7 +795,7 @@ def _subsequence_dtw(C):
 
 
 def _stabilize_user_window(path, user_n_frames, window=12, min_hits=10):
-    """Trim noisy DTW edges; keep only stable user-frame coverage window."""
+    """Обрезает шумные края DTW и оставляет стабильный участок кадров пользователя."""
     if not path or user_n_frames <= 0:
         return path, 0, 0
 
@@ -838,7 +838,7 @@ def _stabilize_user_window(path, user_n_frames, window=12, min_hits=10):
 
 
 def scale_keypoints_to_frame(kp, w_src, h_src, w_dst, h_dst):
-    """Map keypoints from source video pixel space to destination frame size."""
+    """Переносит точки тела из одного размера кадра в другой."""
     out = kp.astype(np.float64, copy=True)
     out[:, 0] *= w_dst / float(w_src)
     out[:, 1] *= h_dst / float(h_src)
@@ -846,7 +846,7 @@ def scale_keypoints_to_frame(kp, w_src, h_src, w_dst, h_dst):
 
 
 def _body_center_and_scale(kp, scores=None, score_thr=_DEFAULT_SCORE_THR):
-    """Return (center_xy, scale) of the body in pixel coords."""
+    """Возвращает центр тела и его масштаб в пикселях."""
     k = np.asarray(kp, dtype=np.float64)
     xy = k[:, :2]
 
@@ -892,7 +892,7 @@ def remap_reference_keypoints_for_overlay(
     w_dst=None,
     h_dst=None,
 ):
-    """Place the reference skeleton onto the user frame as a similarity transform."""
+    """Накладывает эталонный скелет на кадр пользователя с подгонкой размера и положения."""
     ref_xy = np.asarray(kp_ref, dtype=np.float64)[:, :2]
     ref_c, ref_s = _body_center_and_scale(kp_ref, sc_ref)
     user_c, user_s = _body_center_and_scale(kp_user, sc_user)
@@ -910,9 +910,9 @@ def remap_reference_keypoints_for_overlay(
 
 
 def _draw_skeleton(frame, kp, color, dot_radius=4, line_thickness=2):
-    """Draw skeleton lines then joint dots for one person.
+    """Рисует скелет: сначала линии между точками, потом сами точки.
 
-    kp is a (17, 3) array with columns [x, y, conf].
+    kp — массив (17, 3) с колонками [x, y, уверенность].
     """
     for a, b in COCO_CONNECTIONS:
         if kp[a, 2] > _DEFAULT_SCORE_THR and kp[b, 2] > _DEFAULT_SCORE_THR:
@@ -930,7 +930,7 @@ def _draw_skeleton(frame, kp, color, dot_radius=4, line_thickness=2):
 
 
 def _draw_overlay_legend(frame, ref_color, user_color):
-    """Draw legend explaining which skeleton belongs to whom."""
+    """Рисует легенду: какой скелет эталонный, какой — ваш."""
     h, w = frame.shape[:2]
     pad = 12
     box_w = 250
@@ -959,7 +959,7 @@ def _draw_overlay_legend(frame, ref_color, user_color):
     )
     cv2.putText(
         frame,
-        "Original (reference)",
+        "Эталон",
         (text_x, line1_y),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.55,
@@ -977,7 +977,7 @@ def _draw_overlay_legend(frame, ref_color, user_color):
     )
     cv2.putText(
         frame,
-        "Your keypoints",
+        "Ваши точки",
         (text_x, line2_y),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.55,
@@ -996,14 +996,14 @@ def draw_overlay(frame, kp, error, threshold=0.5, kp_ref=None):
 
     if error < threshold:
         color = (0, 255, 0)
-        text = "GOOD"
+        text = "ХОРОШО"
     else:
         color = (0, 0, 255)
-        text = "BAD"
+        text = "ПЛОХО"
 
     cv2.putText(
         frame,
-        f"{text} | error: {error:.2f}",
+        f"{text} | ошибка: {error:.2f}",
         (30, 40),
         cv2.FONT_HERSHEY_SIMPLEX,
         1,
@@ -1036,19 +1036,19 @@ def extract_keypoints(
     cap_max_distance_scale: float = 1.0,
     frame_stride: int = 1,
 ) -> dict:
-    """Run RTMPose-L + One-Euro smoother on every frame of a video.
+    """Распознаёт позу на каждом кадре видео и сглаживает результат.
 
-    Returns a dict with keys:
-        keypoints_seq  — list of (17, 3) arrays [x, y, conf] per frame
-        scores_seq     — list of (17,) confidence arrays per frame
-        frame_indices  — list of consecutive integers [0 .. N-1]
-        frames         — list of BGR frames or None (when cache_frames=False)
-        fps            — video frame rate
-        wh             — (width, height) of the video
+    Возвращает словарь с ключами:
+        keypoints_seq  — список массивов (17, 3) [x, y, уверенность] по кадрам
+        scores_seq     — список массивов (17,) с уверенностью по кадрам
+        frame_indices  — список номеров кадров [0 .. N-1]
+        frames         — список кадров BGR или None (если cache_frames=False)
+        fps            — частота кадров видео
+        wh             — (ширина, высота) видео
     """
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        raise RuntimeError(f"Cannot open {video_path}")
+        raise RuntimeError(f"Не удалось открыть видео: {video_path}")
 
     fps = cap.get(cv2.CAP_PROP_FPS) or 20.0
     video_wh = (
@@ -1084,7 +1084,7 @@ def extract_keypoints(
             frames_cache.append(frame)
 
         if frame_stride > 1 and frame_idx % frame_stride != 0:
-            # Skip model inference on this frame; let the smoother predict.
+            # Пропускаем распознавание на этом кадре; сглаживатель сам догадает позу.
             kp_xy_s, kp_conf_s = smoother.predict_only(current_cap=None)
         else:
             infer_frame = _preprocess(frame) if preprocess else frame
@@ -1152,12 +1152,12 @@ def _open_writer(
     h: int,
     preferred: str = "avc1",
 ) -> tuple[cv2.VideoWriter, str]:
-    """Open a VideoWriter preferring H.264 (avc1) with mp4v as fallback."""
+    """Открывает VideoWriter: сначала H.264 (avc1), при ошибке — mp4v."""
     for tag in (preferred, "mp4v"):
         writer = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*tag), fps, (w, h))
         if writer.isOpened():
             return writer, tag
-    raise RuntimeError(f"Cannot open VideoWriter for {path}")
+    raise RuntimeError(f"Не удалось создать видеофайл: {path}")
 
 
 def compare_videos(
@@ -1168,26 +1168,25 @@ def compare_videos(
     output_max_side: int | None = None,
     user_kwargs: dict | None = None,
 ) -> dict:
-    """Compare a user video against pre-extracted reference keypoints.
+    """Сравнивает видео пользователя с заранее извлечёнными точками эталона.
 
-    Args:
-        user_video: Path to the user's performance video.
-        ref_data: Dict returned by extract_keypoints() for the reference video.
-        output_path: Where to write the annotated output video.
-        threshold: Per-frame error threshold for GOOD/BAD label in the overlay.
+    Аргументы:
+        user_video: Путь к видео пользователя.
+        ref_data: Словарь из extract_keypoints() для эталонного видео.
+        output_path: Куда сохранить видео с разметкой.
+        threshold: Порог ошибки на кадр для меток ХОРОШО/ПЛОХО на видео.
 
-    Returns:
-        Dict with dtw_distance, normalized_distance, similarity,
-        weighted_similarity, per_frame_errors, output_path.
+    Возвращает словарь с dtw_distance, normalized_distance, similarity,
+    weighted_similarity, per_frame_errors, output_path.
     """
     ref_keypoints_seq = ref_data["keypoints_seq"]
     ref_scores_seq = ref_data["scores_seq"]
     ref_wh = ref_data["wh"]
 
     if ref_wh[0] <= 0 or ref_wh[1] <= 0:
-        raise RuntimeError("Reference data contains no valid frames")
+        raise RuntimeError("В эталонных данных нет ни одного кадра")
     if not ref_keypoints_seq:
-        raise RuntimeError("No keypoints detected in reference video")
+        raise RuntimeError("На эталонном видео не найдены точки тела")
 
     user_data = extract_keypoints(user_video, cache_frames=True, **(user_kwargs or {}))
     user_keypoints_seq = user_data["keypoints_seq"]
@@ -1198,22 +1197,37 @@ def compare_videos(
     user_wh = user_data["wh"]
 
     if not user_frames:
-        raise RuntimeError(f"No frames could be read from {user_video}")
+        raise RuntimeError(f"Не удалось прочитать кадры из видео: {user_video}")
     if not user_keypoints_seq:
         raise RuntimeError("No keypoints detected in user video")
     if len(user_keypoints_seq) < len(ref_keypoints_seq):
         raise RuntimeError(
-            f"User video too short: {len(user_keypoints_seq)} detected frames, "
-            f"reference requires at least {len(ref_keypoints_seq)}."
+            f"Видео слишком короткое: найдено {len(user_keypoints_seq)} кадров, "
+            f"а для сравнения нужно минимум {len(ref_keypoints_seq)}."
         )
 
     ref_feat = _precompute_pose_features(ref_keypoints_seq, ref_scores_seq)
     user_feat = _precompute_pose_features(user_keypoints_seq, user_scores_seq)
     cost = _cost_matrix(ref_feat, user_feat)
-    distance, path, j_start, j_end = _subsequence_dtw(cost)
+    # Штраф за шаг не по диагонали подбираем под масштаб ошибок этой пары видео.
+    # Без штрафа DTW может схлопнуть эталон в один кадр пользователя.
+    finite_cost = cost[np.isfinite(cost)]
+    step_penalty = 0.4 * float(np.median(finite_cost)) if finite_cost.size else 0.0
+    distance, path, j_start, j_end = _subsequence_dtw(cost, step_penalty=step_penalty)
     path, j_start, j_end = _stabilize_user_window(
         path, len(user_keypoints_seq), window=12, min_hits=10
     )
+
+    # DTW с открытым началом/концом может схлопнуть сравнение в один кадр (j_start == j_end).
+    # Гарантируем, что выходное видео не короче эталона — центрируем по найденному участку.
+    n_user = len(user_keypoints_seq)
+    min_span = min(len(ref_keypoints_seq), n_user)
+    if (j_end - j_start + 1) < min_span:
+        center = (j_start + j_end) // 2
+        j_start = max(0, center - min_span // 2)
+        j_end = min(n_user - 1, j_start + min_span - 1)
+        j_start = max(0, j_end - min_span + 1)
+
     distance = float(sum(cost[int(i), int(j)] for i, j in path))
 
     normalized_distance = distance / max(len(path), 1)
@@ -1221,11 +1235,11 @@ def compare_videos(
 
     h, w = user_frames[0].shape[:2]
     if (w, h) != user_wh:
-        raise RuntimeError("Internal error: user_wh does not match cached frames")
+        raise RuntimeError("Внутренняя ошибка: размер кадра не совпадает с wh")
 
     if output_max_side is not None and max(w, h) > output_max_side:
         scale = output_max_side / max(w, h)
-        w_out = int(w * scale) & ~1  # keep even dimensions for H.264
+        w_out = int(w * scale) & ~1  # чётные размеры нужны для H.264
         h_out = int(h * scale) & ~1
     else:
         scale = 1.0
@@ -1233,17 +1247,14 @@ def compare_videos(
 
     out, _used_codec = _open_writer(output_path, fps, w_out, h_out)
 
-    # Build a dense j→i lookup so every user frame in [j_start, j_end] can be
-    # annotated without repeating or skipping frames. When the DTW path maps
-    # multiple reference frames to the same j we keep the last one (fine for
-    # a per-frame error display). Gaps (user frames not explicitly in the path)
-    # are filled by forward-filling from the preceding matched reference frame.
+    # Для каждого кадра пользователя в [j_start, j_end] находим соответствующий кадр эталона.
+    # Если несколько кадров эталона попали на один j — берём последний.
+    # Пропуски заполняем последним найденным кадром эталона.
     j_to_i: dict[int, int] = {}
     for pi, pj in path:
         j_to_i[int(pj)] = int(pi)
 
-    # Forward-fill: for j values in [j_start, j_end] missing from the path,
-    # inherit the last seen reference index so the overlay stays meaningful.
+    # Заполняем пропуски: для j без пары берём последний найденный индекс эталона.
     last_i = j_to_i.get(j_start, 0)
     j_to_i_dense: dict[int, int] = {}
     for j in range(j_start, j_end + 1):
@@ -1255,7 +1266,7 @@ def compare_videos(
     total_sim = 0.0
     sim_count = 0
 
-    # Compute similarity stats from the DTW path (unchanged semantics).
+    # Считаем сходство по пути DTW (логика не менялась).
     for pi, pj in path:
         pi, pj = int(pi), int(pj)
         if pi >= len(ref_keypoints_seq) or pj >= len(user_keypoints_seq):
@@ -1281,11 +1292,11 @@ def compare_videos(
         total_sim += s_num / (s_den + 1e-8)
         sim_count += 1
 
-    # Build a per-user-frame error map for the overlay (nearest path error).
+    # Ошибка на каждый кадр пользователя для наложения на видео.
     j_to_err: dict[int, float] = {}
     for pi, pj, err in per_frame_errors:
         j_to_err[pj] = err
-    # Forward-fill errors for gap frames.
+    # Заполняем пропуски в ошибках последним известным значением.
     last_err = 0.0
     j_to_err_dense: dict[int, float] = {}
     for j in range(j_start, j_end + 1):
@@ -1293,8 +1304,8 @@ def compare_videos(
             last_err = j_to_err[j]
         j_to_err_dense[j] = last_err
 
-    # Write every user frame from j_start to j_end in sequence — this keeps
-    # the output at native FPS and eliminates DTW-induced freezes/skips.
+    # Пишем все кадры пользователя от j_start до j_end подряд — так сохраняется
+    # исходная частота кадров без зависаний и пропусков из-за DTW.
     for j in range(j_start, j_end + 1):
         if j >= len(user_keypoints_seq):
             break

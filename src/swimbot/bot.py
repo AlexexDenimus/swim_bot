@@ -29,6 +29,7 @@ _ANALYSIS_SEM = asyncio.Semaphore(1)
 
 
 def get_inline_keyboard():
+    """Клавиатура с выбором стиля плавания."""
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Брасс", callback_data="bras")],
@@ -39,23 +40,25 @@ def get_inline_keyboard():
 
 
 async def warmup_references():
+    """Заранее извлекает точки тела из эталонных видео."""
     loop = asyncio.get_running_loop()
     for key, path in REFERENCE_VIDEOS.items():
-        print(f"Extracting keypoints for {key}...", flush=True)
+        print(f"Извлекаю точки тела для «{key}»...", flush=True)
         REFERENCE_KEYPOINTS[key] = await loop.run_in_executor(
             None,
             lambda path=path: extract_keypoints(
                 str(path),
                 False,
-                use_orientation_flip=False,
-                preprocess=False,
-                frame_stride=2,
+                use_orientation_flip=True,
+                preprocess=True,
+                frame_stride=1,
             ),
         )
-    print("Reference warmup complete.", flush=True)
+    print("Эталонные видео подготовлены.", flush=True)
 
 
 async def send_reference_video(callback: CallbackQuery, video_key: str):
+    """Отправляет эталонное видео и запоминает выбранный стиль."""
     USER_STYLE[callback.from_user.id] = video_key
 
     video_path = REFERENCE_VIDEOS[video_key]
@@ -69,6 +72,7 @@ async def send_reference_video(callback: CallbackQuery, video_key: str):
 
 @dp.message(Command("start"))
 async def start_command(message: Message):
+    """Приветствие и выбор стиля плавания."""
     await message.answer(
         "Выберите стиль для плавания", reply_markup=get_inline_keyboard()
     )
@@ -76,6 +80,7 @@ async def start_command(message: Message):
 
 @dp.message(F.video)
 async def video_message(message: Message):
+    """Принимает видео пользователя, сравнивает с эталоном и отправляет результат."""
     user_id = message.from_user.id
     style_key = USER_STYLE.get(user_id)
 
@@ -101,15 +106,15 @@ async def video_message(message: Message):
                 REFERENCE_KEYPOINTS[style_key],
                 str(tmp_out),
                 user_kwargs={
-                    "use_orientation_flip": False,
-                    "preprocess": False,
+                    "use_orientation_flip": True,
+                    "preprocess": True,
                     "frame_stride": 2,
                 },
                 output_max_side=720,
             )
 
         sim_pct = result["weighted_similarity"] * 100
-        if sim_pct >= 70:
+        if sim_pct >= 80:
             verdict = "Отлично!"
         elif sim_pct >= 50:
             verdict = "Неплохо, но есть над чем поработать."
@@ -142,16 +147,19 @@ async def video_message(message: Message):
 
 @dp.callback_query(F.data == "bras")
 async def bras_callback(callback: CallbackQuery):
+    """Обработчик выбора брасса."""
     await send_reference_video(callback, "bras")
 
 
 @dp.callback_query(F.data == "crawl")
 async def crawl_callback(callback: CallbackQuery):
+    """Обработчик выбора кроля."""
     await send_reference_video(callback, "crawl")
 
 
 async def main():
+    """Запускает бота и начинает приём сообщений."""
     TMP_DIR.mkdir(parents=True, exist_ok=True)
-    print("Bot is running...")
+    print("Бот запущен...")
     await warmup_references()
     await dp.start_polling(bot)

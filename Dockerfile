@@ -3,8 +3,8 @@ FROM python:3.11-slim
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-# System libraries required by OpenCV/ffmpeg at runtime.
-# libxcb1 + the x11/gl libs fix the "libxcb.so.1: cannot open shared object file" crash.
+# Системные библиотеки для OpenCV и ffmpeg.
+# libxcb1 и x11/gl нужны, чтобы не падать с ошибкой libxcb.so.1.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
@@ -21,8 +21,7 @@ WORKDIR /app
 COPY requirements.txt pyproject.toml ./
 COPY src/ src/
 
-# rtmlib pulls in GUI OpenCV (opencv-python / opencv-contrib-python).
-# Remove those and keep only the headless builds so cv2 never needs an X server.
+# rtmlib тянет OpenCV с GUI. Удаляем его и оставляем headless-сборку без X-сервера.
 RUN pip install --upgrade pip \
     && pip install -r requirements.txt \
     && pip uninstall -y opencv-python opencv-contrib-python || true \
